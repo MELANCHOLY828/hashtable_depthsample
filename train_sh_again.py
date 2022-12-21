@@ -44,7 +44,7 @@ class NeRFSystem(LightningModule):
         self.idx = 0
         self.idx_gpus = -1
         self.loss = loss_dict[args.loss_type]()
-        
+        self.use_depth = False
         self.save_path = '/data/liufengyi/Results'
         self.embedding_xyz = Embedding(3, 10)
         self.embedding_dir = Embedding(3, 4) # 4 is the default number
@@ -210,7 +210,8 @@ class NeRFSystem(LightningModule):
         results = defaultdict(list)
         for i in range(0, B, self.args.chunk):
             rendered_ray_chunks = \
-                render_sh_sample(self.models,
+                render_sh_sample(self.return_depth,
+                            self.models,
                             self.embeddings,
                             rays[i:i+self.args.chunk],   #[32768, 8]
                             world_size,
@@ -249,7 +250,7 @@ class NeRFSystem(LightningModule):
         train_dir = val_dir = self.args.root_dir
         # self.train_dataset = dataset(root_dir=train_dir, split='train', max_len=-1)
         # self.val_dataset   = dataset(root_dir=val_dir, split='val', max_len=10)
-        self.train_dataset = dataset(root_dir=train_dir, split='train', img_wh = self.args.img_wh)
+        self.train_dataset = dataset(root_dir=train_dir, split='train', img_wh = self.args.img_wh, depth = False)
         self.xyz_min, self.xyz_max = self.train_dataset.get_box()
         self.coor_min = (self.box_min - torch.tensor((0,0,0)))/torch.tensor((self.size[0]-1,self.size[1]-1,self.size[2]-1))*(self.xyz_max - self.xyz_min) + self.xyz_min
         self.coor_max = (self.box_max - torch.tensor((0,0,0)))/torch.tensor((self.size[0]-1,self.size[1]-1,self.size[2]-1))*(self.xyz_max - self.xyz_min) + self.xyz_min
@@ -266,11 +267,16 @@ class NeRFSystem(LightningModule):
                  hidden_layers = self.args.hidden_layers, 
                  out_features = self.args.out_features,
                  outermost_linear=True).cuda()
+        # if self.args.ckpt_path_2th:
+        #     print("loading model 2    ")
+        #     ckpt = torch.load(self.args.ckpt_path_2th)
+        #     self.model_HashSiren.load_state_dict(ckpt['model_HashSiren'])
         # for i in self.model_HashSiren.net.parameters():
         #     i.requires_grad=False
         # self.model_HashSiren.net.requires_grad = False
         self.models = [self.model_HashSiren]
-        self.val_dataset   = dataset(root_dir=val_dir, split='val', img_wh = self.args.img_wh)
+        self.val_dataset  = dataset(root_dir=val_dir, split='train', img_wh = self.args.img_wh, depth = True)
+        self.return_depth = True
     def configure_optimizers(self):
         self.optimizer = get_optimizer(self.args, self.models)
         # self.optimizer = torch.optim.Adam(list(self.model_HashSiren.parameters()), lr=self.args.lr_NeRF, 
@@ -394,7 +400,8 @@ class NeRFSystem(LightningModule):
         # else:
         #     self.idx_gpus = (self.idx-2)//4 + 1
         # # self.idx_gpus = self.idx//8
-
+        if batch_nb == 17:
+            print("stop")
         self.idx += 1
         if self.idx == 1:
             self.idx_gpus = 0
@@ -415,26 +422,36 @@ class NeRFSystem(LightningModule):
         #     xyz_max = self.grid_bounds[1].squeeze()
         #     self._set_grid_resolution(self.args.num_voxels, self.args.mpi_depth, xyz_max, xyz_min)
         # self.world_size = torch.tensor([256,256,256])
-        results = self(rays, self.world_size, self.grid_bounds)      
-          
-        # results = self(rays.float())
+        results = self(rays, self.world_size, self.grid_bounds)
         log = {'val_loss': self.loss(results, rgbs)}
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-        log['val_psnr'] = psnr(results[f'rgb_{typ}'], rgbs)
-        # log['psnr_nerv'] = psnr(rgbs_NeRV, rgbs)
+        log['val_psnr'] = psnr(results[f'rgb_{typ}'], rgbs)      
+        if self.return_depth:
+            # typ = 'fine' if 'rgb_fine' in results else 'coarse'
+            
+            train_depth = results[f'depth_{typ}'].reshape(*self.image_shape.shape[:-1],1).cpu().numpy()
+            imageio.imwrite(f"/data/liufengyi/Datasets/nerf_synthetic/nerf_synthetic/lego/train_depth1/r_{batch_nb}.png", (train_depth*255).astype('uint8'))
 
-        # img = results['rgb_coarse'].reshape(400,400,3).permute(2,0,1).cpu()
-        img = results[f'rgb_{typ}'].reshape(*self.image_shape.shape).permute(2,0,1).cpu()
-        # img1 = rgbs.reshape(400,400,3).permute(2,0,1).cpu()
-        img1 = rgbs.reshape(*self.image_shape.shape).permute(2,0,1).cpu()
+            np.savez(f"/data/liufengyi/Datasets/nerf_synthetic/nerf_synthetic/lego/train_depth/r_{batch_nb}", train_depth)
+        else:
+            # results = self(rays.float())
+            # log = {'val_loss': self.loss(results, rgbs)}
+            # typ = 'fine' if 'rgb_fine' in results else 'coarse'
+            # log['val_psnr'] = psnr(results[f'rgb_{typ}'], rgbs)
+            # log['psnr_nerv'] = psnr(rgbs_NeRV, rgbs)
 
-        img1 = img1.unsqueeze(0)
-        img = img.unsqueeze(0)
-        # img2 = img2.unsqueeze(0)
-        img_vis = torch.cat((img1,img),dim=0).permute(2,0,3,1).reshape(img1.shape[2],-1,3).numpy()
-        os.makedirs(f'{self.save_path}/hash_table/val_img/{self.args.exp_name}/',exist_ok=True)
-        imageio.imwrite(f'{self.save_path}/hash_table/val_img/{self.args.exp_name}/{self.idx_gpus:02d}_{batch_nb:02d}.png', (img_vis*255).astype('uint8'))
-        
+            # img = results['rgb_coarse'].reshape(400,400,3).permute(2,0,1).cpu()
+            img = results[f'rgb_{typ}'].reshape(*self.image_shape.shape).permute(2,0,1).cpu()
+            # img1 = rgbs.reshape(400,400,3).permute(2,0,1).cpu()
+            img1 = rgbs.reshape(*self.image_shape.shape).permute(2,0,1).cpu()
+
+            img1 = img1.unsqueeze(0)
+            img = img.unsqueeze(0)
+            # img2 = img2.unsqueeze(0)
+            img_vis = torch.cat((img1,img),dim=0).permute(2,0,3,1).reshape(img1.shape[2],-1,3).numpy()
+            os.makedirs(f'{self.save_path}/hash_table/val_img/{self.args.exp_name}/',exist_ok=True)
+            imageio.imwrite(f'{self.save_path}/hash_table/val_img/{self.args.exp_name}/{self.idx_gpus:02d}_{batch_nb:02d}.png', (img_vis*255).astype('uint8'))
+            
 
         
         return log
@@ -498,7 +515,7 @@ if __name__ == '__main__':
         os.makedirs(dirpath,exist_ok=True)
         record_code = {
             'name' : args.exp_name,
-            'description' : "网格160,28维hash,2048个采样点,再次采样,把box变小,出了box直接设置为1,MLP为2*64,送入MLP网络为当前所需网格点"
+            'description' : "网格160,28维hash,2048个采样点,再次采样,把box变小,出了box直接设置为1,MLP为2*64;深度采样,这次是得到深度数据,仅训练一个epoch"
         }
         write_json_data(dirpath, record_code)
         # early_stop_callback = (

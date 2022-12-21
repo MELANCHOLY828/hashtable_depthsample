@@ -1253,7 +1253,8 @@ def render_sh(models,
 
 
 
-def render_sh_sample(models,
+def render_sh_sample(return_depth,
+                models,
                 embeddings,
                 rays,
                 world_size,
@@ -1414,6 +1415,12 @@ def render_sh_sample(models,
     tNear = torch.max(torch.max(t1[:,0], t1[:,1]), t1[:,2])
     tFar = torch.min(torch.min(t2[:,0], t2[:,1]), t2[:,2])
     box_index = (tNear<tFar)
+    if box_index.sum() == 0:
+        rgb_coarse1 = torch.ones((N_rays, 3), device = 'cuda')
+        depth_coarse1 = torch.zeros((N_rays, 1), device = 'cuda')
+        result = {'rgb_coarse': rgb_coarse1,
+                    'depth_coarse': depth_coarse1,}
+        return result
     # tNear = tNear[box_index]
     # tFar = tFar[box_index]
     rays_tmin = tNear
@@ -1464,7 +1471,7 @@ def render_sh_sample(models,
     xyz_coarse_sampled = (rays_o.unsqueeze(1) + \
                          rays_d.unsqueeze(1) * z_vals.unsqueeze(2)) # (N_rays, N_samples, 3)  [32768, 64, 3]
                          
-             
+    
     # xyz_coarse_norm = ((xyz_coarse_sampled - xyz_min) / (xyz_max - xyz_min)).flip((-1,)) * 2 - 1
     xyz_coarse_norm = ((((xyz_coarse_sampled - xyz_min) / (xyz_max - xyz_min))) * 2 - 1).float()
     xyz_coarse_grid = ((xyz_coarse_norm+1)/2*((world_size.cuda()-1).unsqueeze(0).unsqueeze(1)).cuda())
@@ -1588,7 +1595,13 @@ def render_sh_sample(models,
         # rgb_coarse[~box_index] = 1
         # end = time.time() 
         # print("rendering:",end-start4)
-        result = {'rgb_coarse': rgb_coarse1,
+        if return_depth:
+            depth_coarse1 = torch.zeros((N_rays, 1), device = 'cuda')
+            depth_coarse1[box_index] = depth_coarse.unsqueeze(-1)
+            result = {'rgb_coarse': rgb_coarse1,
+                    'depth_coarse': depth_coarse1,}
+        else:
+            result = {'rgb_coarse': rgb_coarse1,
                 #   'box_index': box_index,
                     # 'depth_coarse': depth_coarse,
                     # 'opacity_coarse': weights_coarse.sum(1),

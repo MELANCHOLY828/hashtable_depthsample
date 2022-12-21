@@ -8,7 +8,7 @@ import imageio
 from argparse import ArgumentParser
 from torchsearchsorted import searchsorted
 
-from models.rendering import render_rays1,render_rays, render_rays2
+from models.rendering import *
 from models.nerf import *
 
 from utils import load_ckpt

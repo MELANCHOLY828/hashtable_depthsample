@@ -4,7 +4,7 @@ def config_parser(cmd=None):
     parser = argparse.ArgumentParser()
     parser = configargparse.ArgumentParser()
     parser.add_argument('--root_dir', type=str,
-                        default='/home/zhangruiqi/zrq_project/nerf-pytorch/data/nerf_synthetic/lego',
+                        default='/data/liufengyi/Datasets/nerf_synthetic/nerf_synthetic/lego',
                         help='root directory of dataset')
     parser.add_argument('--dataset_name', type=str, default='blender',
                         choices=['blender', 'llff', 'facebook_NeRV', 'facebook_NeRV1', 'facebook_grid'],
@@ -33,13 +33,17 @@ def config_parser(cmd=None):
                         help='batch size')
     parser.add_argument('--chunk', type=int, default=32*1024,
                         help='chunk size to split the input to avoid OOM')
-    parser.add_argument('--num_epochs', type=int, default=50,
+    parser.add_argument('--num_epochs', type=int, default=1,
                         help='number of training epochs')
     parser.add_argument('--num_gpus', type=int, default=1,
                         help='number of gpus')
 
     parser.add_argument('--ckpt_path', type=str, default="/data/zhangruiqi/lfy/data/results/hash_table/checkpoints/test/ckpts/HashTable_2.tar",
                         help='pretrained checkpoint path to load')
+    parser.add_argument('--ckpt_path_2th', type=str, default="/data/liufengyi/Results/hash_table/checkpoints/160_get_depth/ckpts/HashTable_final.tar",
+                        help='pretrained checkpoint path to load')
+    # parser.add_argument('--ckpt_path_2th', type=str, default=None,
+    #                     help='pretrained checkpoint path to load')
     # parser.add_argument('--ckpt_path', type=str, default=None,
     #                     help='pretrained checkpoint path to load')
     parser.add_argument('--prefixes_to_ignore', nargs='+', type=str, default=['loss'],
@@ -77,7 +81,7 @@ def config_parser(cmd=None):
     # parser.add_argument('--exp_name', type=str, default='lego_64_HashMlp-sh-2048-MLP(4*128)',
     #                     help='experiment name')
     
-    parser.add_argument('--exp_name', type=str, default='NoUse',
+    parser.add_argument('--exp_name', type=str, default='160_get_depth',
                         help='experiment name')
     # parser.add_argument('--exp_name', type=str, default='sample_again_160',
     #                     help='experiment name')
