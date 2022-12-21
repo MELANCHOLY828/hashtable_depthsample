@@ -61,26 +61,25 @@ class NeRFSystem(LightningModule):
         if self.args.ckpt_path:
             ckpt = torch.load(self.args.ckpt_path)
       
-        self.model_HashSiren = HashSiren(hash_mod = True,
+        self.model_HashSiren = HashMlp(hash_mod = True,
                  hash_table_length = 171*171*139,
                  in_features = self.args.in_features, 
                  hidden_features = self.args.hidden_features, 
                  hidden_layers = self.args.hidden_layers, 
                  out_features = self.args.out_features,
-                 outermost_linear=True, 
-                 first_omega_0=30, 
-                 hidden_omega_0=30.0).cuda()
+                 outermost_linear=True).cuda()
         if self.args.ckpt_path:
             self.model_HashSiren.load_state_dict(ckpt['model_HashSiren'])
             # self.model_HashSiren.table.requires_grad = False
-            for i in self.model_HashSiren.net.parameters():
-                i.requires_grad = False
+            # for i in self.model_HashSiren.net.parameters():
+            #     i.requires_grad = False
         self.models = [self.model_HashSiren]
         self.model_MLP_dir = MLP_dir().cuda()
         if self.args.ckpt_path:
+            print("loading model")
             self.model_MLP_dir.load_state_dict(ckpt['model_MLP_dir'])
-            for i in self.model_MLP_dir.parameters():
-                i.requires_grad = False
+            # for i in self.model_MLP_dir.parameters():
+            #     i.requires_grad = False
         self.models += [self.model_MLP_dir]
         
         # self.nerf_coarse = NeRF()
@@ -387,7 +386,7 @@ class NeRFSystem(LightningModule):
         
         return 
 
-    def save_ckpt(self, psnr, name='final'):
+    def save_ckpt(self, psnr = 0, name='final'):
         
         save_dir = f'/data1/liufengyi/get_results/hash_table/checkpoints/{self.args.exp_name}/ckpts/'
         os.makedirs(save_dir, exist_ok=True)
